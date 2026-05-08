@@ -125,126 +125,127 @@ namespace ORB_SLAM2
     }
 
     std::vector<Detection::Ptr> ObjectDetector::detect(cv::Mat img) const
-    {
-
-        // Settings
-        // int INPUT_WIDTH = 320.0; // size of image passed to the network (reducing may be faster to process)
-        // int INPUT_HEIGHT = 320.0;
+{
         const float SCORE_THRESHOLD = 0.5;
         const float NMS_THRESHOLD = 0.45;
-        const float CONFIDENCE_THRESHOLD = 0.45;
+        const int NUM_MASK_COEFS = 32; // yolov8n-seg punya 32 prototype masks
 
         cv::Mat result;
         cv::dnn::blobFromImage(img, result, 1.0 / 255, cv::Size(INPUT_WIDTH_, INPUT_HEIGHT_), cv::Scalar(), true, false);
 
+        // Ambil SEMUA output layer (yolov8n-seg punya 2: deteksi + prototypes)
         std::vector<cv::Mat> predictions;
-        // for (auto x : network_->getUnconnectedOutLayersNames())
-        //     std::cout << x  << std::endl;
-
-        auto outnames = network_->getUnconnectedOutLayersNames().back(); // output only the last layer
         network_->setInput(result);
-        network_->forward(predictions, outnames);
-        cv::Mat &output = predictions[0];
-        // output should have size: 1 x nb_detections x (5 + nb_classes)
+        network_->forward(predictions, network_->getUnconnectedOutLayersNames());
 
+        // output0: deteksi — shape [1, 4+nc+32, 8400]
+        // output1: prototype masks — shape [1, 32, 160, 160]
+        cv::Mat output = predictions[0];
+        cv::Mat protos = predictions[1]; // shape: [1, 32, mask_h, mask_w]
+
+        // YOLOv8 output: cols > rows, perlu di-transpose
+        // setelah transpose: rows = 8400 (kandidat), cols = 4+nc+32
         int rows = output.size[1];
         int cols = output.size[2];
-
-        bool yolov8 = false;
-
         if (cols > rows)
         {
-            yolov8 = true;
             rows = output.size[2];
             cols = output.size[1];
-
             output = output.reshape(1, cols);
             cv::transpose(output, output);
         }
 
+        // Jumlah kelas = total kolom - 4 (bbox) - 32 (mask coefs)
+        int num_classes = cols - 4 - NUM_MASK_COEFS;
+
         float x_factor = (float)(img.cols) / INPUT_WIDTH_;
         float y_factor = (float)(img.rows) / INPUT_HEIGHT_;
         float *data = (float *)output.data;
+
         std::vector<int> class_ids;
-        class_ids.reserve(1000);
         std::vector<float> confidences;
-        confidences.reserve(1000);
         std::vector<cv::Rect> boxes;
-        boxes.reserve(1000);
+        std::vector<std::vector<float>> mask_coefs_list; // simpan koefisien mask tiap kandidat
 
         for (int i = 0; i < rows; ++i)
         {
+            // Kolom 0-3: x, y, w, h (posisi)
+            // Kolom 4 sampai 4+num_classes-1: skor per kelas
+            // Kolom 4+num_classes sampai akhir: 32 mask coefficients
+            float *classes_scores = data + 4;
+            cv::Mat scores(1, num_classes, CV_32FC1, classes_scores);
+            cv::Point class_id;
+            double max_class_score;
+            minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
 
-            float *classes_scores = nullptr;
-
-            if (!yolov8)
+            if (ignored_cats_.count(class_id.x) == 0 && max_class_score > SCORE_THRESHOLD)
             {
-                float confidence = data[4];
-                if (confidence >= CONFIDENCE_THRESHOLD)
-                {
-                    classes_scores = data + 5;
-                    cv::Mat scores(1, (cols - 5), CV_32FC1, classes_scores);
-                    cv::Point class_id;
-                    double max_class_score;
-                    minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
-                    if (ignored_cats_.count(class_id.x) == 0 && max_class_score > SCORE_THRESHOLD)
-                    {
+                confidences.push_back(max_class_score);
+                class_ids.push_back(class_id.x);
 
-                        confidences.push_back(max_class_score);
-                        class_ids.push_back(class_id.x);
+                float x = data[0], y = data[1], w = data[2], h = data[3];
+                int left  = int((x - 0.5f * w) * x_factor);
+                int top   = int((y - 0.5f * h) * y_factor);
+                boxes.push_back(cv::Rect(left, top, int(w * x_factor), int(h * y_factor)));
 
-                        float x = data[0];
-                        float y = data[1];
-                        float w = data[2];
-                        float h = data[3];
-                        int left = int((x - 0.5 * w) * x_factor);
-                        int top = int((y - 0.5 * h) * y_factor);
-                        int width = int(w * x_factor);
-                        int height = int(h * y_factor);
-                        boxes.push_back(cv::Rect(left, top, width, height));
-                    }
-                }
-            }
-            else
-            {
-                classes_scores = data + 4;
-                cv::Mat scores(1, (cols - 4), CV_32FC1, classes_scores);
-                cv::Point class_id;
-                double max_class_score;
-                minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
-                if (ignored_cats_.count(class_id.x) == 0 && max_class_score > SCORE_THRESHOLD)
-                {
-
-                    confidences.push_back(max_class_score);
-                    class_ids.push_back(class_id.x);
-
-                    float x = data[0];
-                    float y = data[1];
-                    float w = data[2];
-                    float h = data[3];
-                    int left = int((x - 0.5 * w) * x_factor);
-                    int top = int((y - 0.5 * h) * y_factor);
-                    int width = int(w * x_factor);
-                    int height = int(h * y_factor);
-                    boxes.push_back(cv::Rect(left, top, width, height));
-                }
+                // Simpan 32 mask coefficients untuk kandidat ini
+                std::vector<float> coefs(data + 4 + num_classes, data + 4 + num_classes + NUM_MASK_COEFS);
+                mask_coefs_list.push_back(coefs);
             }
             data += cols;
         }
 
-        // Filter detection with NMS
-        std::vector<Detection::Ptr> detections;
+        // NMS: buang kotak yang overlap
         std::vector<int> nms_result;
         cv::dnn::NMSBoxes(boxes, confidences, SCORE_THRESHOLD, NMS_THRESHOLD, nms_result);
-        for (int i = 0; i < nms_result.size(); i++)
+
+        // Ukuran prototype mask (biasanya 160x160)
+        int proto_h = protos.size[2];
+        int proto_w = protos.size[3];
+        // Reshape protos dari [1, 32, 160, 160] menjadi [32, 160*160]
+        cv::Mat protos_2d = protos.reshape(1, NUM_MASK_COEFS); // [32, 160*160]
+
+        std::vector<Detection::Ptr> detections;
+        for (int i = 0; i < (int)nms_result.size(); i++)
         {
             int idx = nms_result[i];
             cv::Rect &bb = boxes[idx];
+
+            // --- Hitung mask ---
+            // 1. mask_coefs [1x32] × protos_2d [32×25600] = raw_mask [1×25600]
+            cv::Mat coefs_mat(1, NUM_MASK_COEFS, CV_32FC1, mask_coefs_list[idx].data());
+            cv::Mat raw_mask = coefs_mat * protos_2d; // [1, 160*160]
+            raw_mask = raw_mask.reshape(1, proto_h);  // [160, 160]
+
+            // 2. Sigmoid: ubah nilai mentah jadi probabilitas 0-1
+            cv::exp(-raw_mask, raw_mask);
+            raw_mask = 1.0f / (1.0f + raw_mask);
+
+            // 3. Resize mask dari 160x160 ke ukuran gambar asli
+            cv::Mat mask_full;
+            cv::resize(raw_mask, mask_full, cv::Size(img.cols, img.rows));
+
+            // 4. Crop mask sesuai bbox, lalu threshold jadi binary (0 atau 255)
+            cv::Mat mask_final = cv::Mat::zeros(img.rows, img.cols, CV_8UC1);
+            cv::Rect safe_bb(
+                std::max(bb.x, 0), std::max(bb.y, 0),
+                std::min(bb.width,  img.cols - std::max(bb.x, 0)),
+                std::min(bb.height, img.rows - std::max(bb.y, 0))
+            );
+            if (safe_bb.width > 0 && safe_bb.height > 0)
+            {
+                cv::Mat roi = mask_full(safe_bb);
+                cv::Mat roi_thresh;
+                cv::threshold(roi, roi_thresh, 0.5, 255, cv::THRESH_BINARY);
+                roi_thresh.convertTo(mask_final(safe_bb), CV_8UC1);
+            }
+
             Eigen::Vector4d bbox(bb.x, bb.y, bb.x + bb.width, bb.y + bb.height);
-            detections.push_back(std::shared_ptr<Detection>(new Detection(class_ids[idx], confidences[idx], bbox)));
+            detections.push_back(std::make_shared<Detection>(class_ids[idx], confidences[idx], bbox, mask_final));
         }
         return detections;
     }
+
 #endif
 
 }

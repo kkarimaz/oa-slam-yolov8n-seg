@@ -45,11 +45,19 @@ public:
     Detection(unsigned int cat, double det_score, const BBox2 bb)
     : category_id(cat), score(det_score), bbox(bb) {}
 
+    // This constructor is for instance segmentation, where we also have a binary mask for each detection
+    Detection(unsigned int cat, double det_score, const BBox2 bb, const cv::Mat& m)
+    : category_id(cat), score(det_score), bbox(bb), mask(m) {}
 
     friend std::ostream& operator <<(std::ostream& os, const Detection& det);
     unsigned int category_id;
     double score;
     BBox2 bbox;
+    cv::Mat mask;   // binary mask, sama ukuran dengan gambar input. putih = area objek
+
+private:
+    Detection() = delete;
+
 
 private:
     Detection() = delete;
