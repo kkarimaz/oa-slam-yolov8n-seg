@@ -1,7 +1,6 @@
-# OA-SLAM-YOLOv8
+# OA-SLAM-YOLOv8n-seg
 
-This is a fork of OA-SLAM to support YOLOv8 and some other benchmarking processes added for the purpose of my undergraduate thesis, if you interested more about the original code, you can check the links down below.
-
+This is a fork of OA-SLAM to support YOLOv8n-seg and some other benchmarking processes added for the purpose of a research project.
 - [Source Code](https://gitlab.inria.fr/tangram/oa-slam)
 
 **Associated Publication:**
