@@ -231,7 +231,7 @@ protected:
     Map* mpMap;
 
     std::mutex mMutexPose;
-    std::mutex mMutexConnections;
+    std::recursive_mutex mMutexConnections;
     std::mutex mMutexFeatures;
 };
 

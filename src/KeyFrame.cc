@@ -128,7 +128,7 @@ cv::Mat KeyFrame::GetTranslation()
 void KeyFrame::AddConnection(KeyFrame *pKF, const int &weight)
 {
     {
-        unique_lock<mutex> lock(mMutexConnections);
+        unique_lock<recursive_mutex> lock(mMutexConnections);
         if(!mConnectedKeyFrameWeights.count(pKF))
             mConnectedKeyFrameWeights[pKF]=weight;
         else if(mConnectedKeyFrameWeights[pKF]!=weight)
@@ -142,7 +142,7 @@ void KeyFrame::AddConnection(KeyFrame *pKF, const int &weight)
 
 void KeyFrame::UpdateBestCovisibles()
 {
-    unique_lock<mutex> lock(mMutexConnections);
+    unique_lock<recursive_mutex> lock(mMutexConnections);
     vector<pair<int,KeyFrame*> > vPairs;
     vPairs.reserve(mConnectedKeyFrameWeights.size());
     for(map<KeyFrame*,int>::iterator mit=mConnectedKeyFrameWeights.begin(), mend=mConnectedKeyFrameWeights.end(); mit!=mend; mit++)
@@ -163,7 +163,7 @@ void KeyFrame::UpdateBestCovisibles()
 
 set<KeyFrame*> KeyFrame::GetConnectedKeyFrames()
 {
-    unique_lock<mutex> lock(mMutexConnections);
+    unique_lock<recursive_mutex> lock(mMutexConnections);
     set<KeyFrame*> s;
     for(map<KeyFrame*,int>::iterator mit=mConnectedKeyFrameWeights.begin();mit!=mConnectedKeyFrameWeights.end();mit++)
         s.insert(mit->first);
@@ -172,13 +172,13 @@ set<KeyFrame*> KeyFrame::GetConnectedKeyFrames()
 
 vector<KeyFrame*> KeyFrame::GetVectorCovisibleKeyFrames()
 {
-    unique_lock<mutex> lock(mMutexConnections);
+    unique_lock<recursive_mutex> lock(mMutexConnections);
     return mvpOrderedConnectedKeyFrames;
 }
 
 vector<KeyFrame*> KeyFrame::GetBestCovisibilityKeyFrames(const int &N)
 {
-    unique_lock<mutex> lock(mMutexConnections);
+    unique_lock<recursive_mutex> lock(mMutexConnections);
     if((int)mvpOrderedConnectedKeyFrames.size()<N)
         return mvpOrderedConnectedKeyFrames;
     else
@@ -188,7 +188,7 @@ vector<KeyFrame*> KeyFrame::GetBestCovisibilityKeyFrames(const int &N)
 
 vector<KeyFrame*> KeyFrame::GetCovisiblesByWeight(const int &w)
 {
-    unique_lock<mutex> lock(mMutexConnections);
+    unique_lock<recursive_mutex> lock(mMutexConnections);
 
     if(mvpOrderedConnectedKeyFrames.empty())
         return vector<KeyFrame*>();
@@ -205,7 +205,7 @@ vector<KeyFrame*> KeyFrame::GetCovisiblesByWeight(const int &w)
 
 int KeyFrame::GetWeight(KeyFrame *pKF)
 {
-    unique_lock<mutex> lock(mMutexConnections);
+    unique_lock<recursive_mutex> lock(mMutexConnections);
     if(mConnectedKeyFrameWeights.count(pKF))
         return mConnectedKeyFrameWeights[pKF];
     else
@@ -366,7 +366,7 @@ void KeyFrame::UpdateConnections()
     }
 
     {
-        unique_lock<mutex> lockCon(mMutexConnections);
+        unique_lock<recursive_mutex> lockCon(mMutexConnections);
 
         // mspConnectedKeyFrames = spConnectedKeyFrames;
         mConnectedKeyFrameWeights = KFcounter;
@@ -385,64 +385,64 @@ void KeyFrame::UpdateConnections()
 
 void KeyFrame::AddChild(KeyFrame *pKF)
 {
-    unique_lock<mutex> lockCon(mMutexConnections);
+    unique_lock<recursive_mutex> lockCon(mMutexConnections);
     mspChildrens.insert(pKF);
 }
 
 void KeyFrame::EraseChild(KeyFrame *pKF)
 {
-    unique_lock<mutex> lockCon(mMutexConnections);
+    unique_lock<recursive_mutex> lockCon(mMutexConnections);
     mspChildrens.erase(pKF);
 }
 
 void KeyFrame::ChangeParent(KeyFrame *pKF)
 {
-    unique_lock<mutex> lockCon(mMutexConnections);
+    unique_lock<recursive_mutex> lockCon(mMutexConnections);
     mpParent = pKF;
     pKF->AddChild(this);
 }
 
 set<KeyFrame*> KeyFrame::GetChilds()
 {
-    unique_lock<mutex> lockCon(mMutexConnections);
+    unique_lock<recursive_mutex> lockCon(mMutexConnections);
     return mspChildrens;
 }
 
 KeyFrame* KeyFrame::GetParent()
 {
-    unique_lock<mutex> lockCon(mMutexConnections);
+    unique_lock<recursive_mutex> lockCon(mMutexConnections);
     return mpParent;
 }
 
 bool KeyFrame::hasChild(KeyFrame *pKF)
 {
-    unique_lock<mutex> lockCon(mMutexConnections);
+    unique_lock<recursive_mutex> lockCon(mMutexConnections);
     return mspChildrens.count(pKF);
 }
 
 void KeyFrame::AddLoopEdge(KeyFrame *pKF)
 {
-    unique_lock<mutex> lockCon(mMutexConnections);
+    unique_lock<recursive_mutex> lockCon(mMutexConnections);
     mbNotErase = true;
     mspLoopEdges.insert(pKF);
 }
 
 set<KeyFrame*> KeyFrame::GetLoopEdges()
 {
-    unique_lock<mutex> lockCon(mMutexConnections);
+    unique_lock<recursive_mutex> lockCon(mMutexConnections);
     return mspLoopEdges;
 }
 
 void KeyFrame::SetNotErase()
 {
-    unique_lock<mutex> lock(mMutexConnections);
+    unique_lock<recursive_mutex> lock(mMutexConnections);
     mbNotErase = true;
 }
 
 void KeyFrame::SetErase()
 {
     {
-        unique_lock<mutex> lock(mMutexConnections);
+        unique_lock<recursive_mutex> lock(mMutexConnections);
         if(mspLoopEdges.empty())
         {
             mbNotErase = false;
@@ -458,7 +458,7 @@ void KeyFrame::SetErase()
 void KeyFrame::SetBadFlag()
 {   
     {
-        unique_lock<mutex> lock(mMutexConnections);
+        unique_lock<recursive_mutex> lock(mMutexConnections);
         if(mnId==0)
             return;
         else if(mbNotErase)
@@ -475,7 +475,7 @@ void KeyFrame::SetBadFlag()
         if(mvpMapPoints[i])
             mvpMapPoints[i]->EraseObservation(this);
     {
-        unique_lock<mutex> lock(mMutexConnections);
+        unique_lock<recursive_mutex> lock(mMutexConnections);
         unique_lock<mutex> lock1(mMutexFeatures);
 
         mConnectedKeyFrameWeights.clear();
@@ -551,13 +551,13 @@ void KeyFrame::SetBadFlag()
 
 bool KeyFrame::isBad()
 {
-    unique_lock<mutex> lock(mMutexConnections);
+    unique_lock<recursive_mutex> lock(mMutexConnections);
     return mbBad;
 }
 
 bool KeyFrame::isToBeErased()
 {
-    unique_lock<mutex> lock(mMutexConnections);
+    unique_lock<recursive_mutex> lock(mMutexConnections);
     return mbToBeErased;
 }
 
@@ -565,7 +565,7 @@ void KeyFrame::EraseConnection(KeyFrame* pKF)
 {
     bool bUpdate = false;
     {
-        unique_lock<mutex> lock(mMutexConnections);
+        unique_lock<recursive_mutex> lock(mMutexConnections);
         if(mConnectedKeyFrameWeights.count(pKF))
         {
             mConnectedKeyFrameWeights.erase(pKF);
