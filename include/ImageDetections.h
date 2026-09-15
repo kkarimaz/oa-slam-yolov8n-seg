@@ -57,10 +57,6 @@ public:
 
 private:
     Detection() = delete;
-
-
-private:
-    Detection() = delete;
 };
 
 

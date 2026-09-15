@@ -53,6 +53,12 @@ namespace ORB_SLAM2
             name = fs::path(name).filename();
             frame_names_.push_back(name);
 
+            // Optional (only present when the json was produced with segmentation
+            // masks, e.g. by scripts/generate_detections.py): needed to rasterize
+            // the "segmentation" polygons back into a full-size binary mask.
+            int img_width = frame.value("width", 0);
+            int img_height = frame.value("height", 0);
+
             std::vector<Detection::Ptr> detections;
             for (auto &d : frame["detections"])
             {
@@ -62,7 +68,26 @@ namespace ORB_SLAM2
                     continue;
                 auto bb = d["bbox"];
                 Eigen::Vector4d bbox(bb[0], bb[1], bb[2], bb[3]);
-                detections.push_back(std::shared_ptr<Detection>(new Detection(cat, score, bbox)));
+
+                if (d.contains("segmentation") && img_width > 0 && img_height > 0)
+                {
+                    cv::Mat mask = cv::Mat::zeros(img_height, img_width, CV_8UC1);
+                    for (auto &polygon : d["segmentation"])
+                    {
+                        std::vector<cv::Point> pts;
+                        pts.reserve(polygon.size() / 2);
+                        for (size_t i = 0; i + 1 < polygon.size(); i += 2)
+                            pts.emplace_back(cvRound(polygon[i].get<double>()),
+                                              cvRound(polygon[i + 1].get<double>()));
+                        if (pts.size() >= 3)
+                            cv::fillPoly(mask, std::vector<std::vector<cv::Point>>{pts}, cv::Scalar(255));
+                    }
+                    detections.push_back(std::make_shared<Detection>(cat, score, bbox, mask));
+                }
+                else
+                {
+                    detections.push_back(std::make_shared<Detection>(cat, score, bbox));
+                }
             }
             detections_[name] = detections;
         }
