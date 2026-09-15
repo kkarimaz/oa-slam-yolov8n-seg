@@ -1,1 +1,18 @@
 .vscode/
+
+# build artifacts
+bin/
+build/
+lib/
+
+# large binary assets (vocabulary, model weights)
+Vocabulary/*.txt
+*.onnx
+*.pt
+
+# benchmark run outputs: keep the small summary CSVs, skip the heavy per-run
+# map/feature dumps and scratch logs
+benchmark_results/result_*/
+benchmark_results_master.log
+retry_master.log
+evo_results/
