@@ -1,0 +1,11 @@
+# CMake build caches are host-specific (paths, compiler, -march flags) —
+# regenerated fresh inside the container instead of copied in.
+build/
+Thirdparty/DBoW2/build/
+Thirdparty/g2o/build/
+Thirdparty/Osmap/build/
+
+.git/
+*.onnx
+*.pt
+Data/
