@@ -124,6 +124,31 @@ In ```webcam_X``` replace **X** by webcam id. YOLOv5 weights are in ONNX format.
 
 In OA-SLAM, YOLOv5 expects images of size 320 x 320. Original size (640 x 640) can be used by modifying ```src/ImageDetections.cc:108```.
 
+### Export YOLOv8 segmentation to ONNX
+
+Install the Ultralytics exporter:
+
+```
+python3 -m pip install ultralytics
+```
+
+Export the default `yolov8n-seg.pt` checkpoint at the 320 x 320 input size used by OA-SLAM:
+
+```
+python3 scripts/export_yolov8n_seg_onnx.py --weights yolov8n-seg.pt
+```
+
+To export into a specific directory or use a GPU:
+
+```
+python3 scripts/export_yolov8n_seg_onnx.py \
+      --weights /path/to/yolov8n-seg.pt \
+      --output-dir models \
+      --device 0
+```
+
+The resulting `.onnx` file can be passed as the `detections_file` argument to `oa-slam`. The exporter disables dynamic shapes and built-in NMS because OA-SLAM performs confidence filtering and NMS in `src/ImageDetections.cc`.
+
 
 
 # Localization mode
