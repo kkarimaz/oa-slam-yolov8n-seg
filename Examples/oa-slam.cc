@@ -215,8 +215,19 @@ int main(int argc, char **argv)
   }
 
   // Create system
+  bool use_viewer = true;
+  bool use_ar_viewer = true;
+  if (const char *headless_env = std::getenv("OASLAM_HEADLESS"))
+  {
+    if (std::string(headless_env) == "1")
+    {
+      use_viewer = false;
+      use_ar_viewer = false;
+      std::cout << "OASLAM_HEADLESS=1: running without Map/AR viewer windows.\n";
+    }
+  }
   ORB_SLAM2::System SLAM(vocabulary_file, parameters_file,
-                         ORB_SLAM2::System::MONOCULAR, true, true, false);
+                         ORB_SLAM2::System::MONOCULAR, use_viewer, use_ar_viewer, false);
   SLAM.SetRelocalizationMode(relocalization_mode);
 
   // Vector for tracking time statistics
