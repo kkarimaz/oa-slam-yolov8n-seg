@@ -8,7 +8,7 @@ ENDIF()
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_FLAGS "-std=c++23 -faligned-new -Wall -Wno-deprecated-declarations -O2 -march=alderlake")
+set(CMAKE_CXX_FLAGS "-std=c++17 -faligned-new -Wall -Wno-deprecated-declarations -O2 -march=native")
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
