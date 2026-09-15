@@ -16,3 +16,7 @@ benchmark_results/result_*/
 benchmark_results_master.log
 retry_master.log
 evo_results/
+
+# python / editor scratch
+__pycache__/
+.~lock.*#
