@@ -30,6 +30,8 @@
 #include <future>
 #include <unistd.h>
 #include <random>
+#include <climits>
+#include <filesystem>
 
 
 namespace ORB_SLAM2
@@ -181,7 +183,19 @@ void ARViewer::Run()
     RenderMode current_mode = RenderMode::color;
     pangolin::AxisDirection spin_direction = pangolin::AxisNone;
     std::vector<std::future<pangolin::Geometry>> geom_to_load;
-    std::vector<std::string>  fn = {"../Data/ball.ply"};
+    // Resolve Data/ball.ply relative to the running executable (not the
+    // current working directory), so oa-slam can be launched from any cwd
+    // (e.g. an output folder) without losing track of the model file.
+    std::string ball_ply_path = "../Data/ball.ply";
+    char exe_path_buf[PATH_MAX];
+    ssize_t exe_path_len = readlink("/proc/self/exe", exe_path_buf, sizeof(exe_path_buf) - 1);
+    if (exe_path_len != -1)
+    {
+        exe_path_buf[exe_path_len] = '\0';
+        std::filesystem::path exe_dir = std::filesystem::path(exe_path_buf).parent_path();
+        ball_ply_path = (exe_dir / ".." / "Data" / "ball.ply").string();
+    }
+    std::vector<std::string>  fn = {ball_ply_path};
      for(const auto& filename : fn)
     {
         geom_to_load.emplace_back(std::async(std::launch::async,[filename](){
