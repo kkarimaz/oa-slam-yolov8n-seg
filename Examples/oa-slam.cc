@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <stdlib.h> /* srand, rand */
@@ -368,6 +369,7 @@ int main(int argc, char **argv)
           .count();
     }
     vTimesTrack.push_back(ttrack);
+    std::printf("FRAME %d %.3f\n", ni, ttrack * 1000.0); std::fflush(stdout);
     // std::cout << "time = " << ttrack << "\n";
     std::cout << "FPS = " << 1 / ttrack << '\n';
     total_execution_time << ni << ',' << ttrack << '\n';
@@ -496,15 +498,19 @@ void LoadImages(const string &strFile, vector<string> &vstrImageFilenames,
 {
   ifstream f;
   f.open(strFile.c_str());
+  if (!f.is_open())
+  {
+    cerr << "ERROR: could not open image list file: " << strFile << endl;
+    exit(1);
+  }
 
   string s0;
   double t = 0;
   int n = 0;
   bool found_timestamps = false;
-  while (!f.eof())
+  string s;
+  while (getline(f, s))
   {
-    string s;
-    getline(f, s);
     if (!s.empty() && s[0] != '#')
     {
       stringstream ss;
