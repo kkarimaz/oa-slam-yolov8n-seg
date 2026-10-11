@@ -20,3 +20,7 @@ evo_results/
 # python / editor scratch
 __pycache__/
 .~lock.*#
+
+# tools/patch_params.py (oa3-agent) backups and detected-defaults cache
+*.oa3.orig
+/oa3_defaults.json
