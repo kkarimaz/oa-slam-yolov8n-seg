@@ -199,6 +199,7 @@ protected:
     bool TrackWithMotionModel();
 
     bool Relocalization();
+    bool RelocalizationImpl();
     bool RelocalizationFromObjects(bool use_points);
 
     void UpdateLocalMap();

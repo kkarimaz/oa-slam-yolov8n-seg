@@ -40,6 +40,7 @@
 
 
 #include "Tracking.h"
+#include "oa3_params.h"
 
 #include<opencv2/core/core.hpp>
 #include<opencv2/features2d/features2d.hpp>
@@ -316,7 +317,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
     current_frame_detections_ = detections;
     current_frame_good_detections_.clear();
     for (auto det : current_frame_detections_) {
-        if (det->score > 0.5) {
+        if (det->score > oa3::P().det_score) {
             // if (det->category_id != 73 && det->score > 0.5 ||  det->score > 0.7) { // for table scene to ignore book on the nappe
             current_frame_good_detections_.push_back(det);
         }
@@ -393,9 +394,9 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
         //     std::cout << "    - tr " << tr->GetId() << " : " << tr->GetNbObservations() << "\n";
         // }
 
-        double MIN_2D_IOU_THRESH = 0.2;
-        double MIN_3D_IOU_THRESH = 0.3;
-        int TIME_DIFF_THRESH = 30;
+        double MIN_2D_IOU_THRESH = oa3::P().iou2d;
+        double MIN_3D_IOU_THRESH = oa3::P().iou3d;
+        int TIME_DIFF_THRESH = oa3::P().time_diff;
 
 
         BBox2 img_bbox(0, 0, im.cols, im.rows);
@@ -480,7 +481,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
                 }
 
                 // Try to match detections to existing object track based on the associated map points
-                int THRESHOLD_NB_MATCH = 10;
+                int THRESHOLD_NB_MATCH = oa3::P().nb_match;
                 std::vector<int> matched_by_points(current_frame_good_detections_.size(), -1);
                 std::vector<std::vector<size_t>> nb_matched_points(current_frame_good_detections_.size(), std::vector<size_t>());
                 for (size_t i = 0; i < current_frame_good_detections_.size(); ++i) {
@@ -563,8 +564,10 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
                                                                     current_frame_idx_, this, kf);
                         // std::cout << "create new track " << tr->GetId() << " at: " << current_frame_idx_ << "\n";
                         new_tracks.push_back(tr);
+                        std::printf("ASSOC %lu new %u\n", (unsigned long)current_frame_idx_, (unsigned)tr->GetId());
                     } else {
                         ObjectTrack::Ptr associated_track = possible_tracks[assigned_track_idx];
+                        std::printf("ASSOC %lu matched %u\n", (unsigned long)current_frame_idx_, (unsigned)associated_track->GetId());
                         associated_track->AddDetection(det->bbox, det->score, Rt, current_frame_idx_, kf);
                         if (kf && associated_track->GetStatus() == ObjectTrackStatus::IN_MAP) {
                             // std::cout << "Add modified objects" << std::endl;
@@ -585,7 +588,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
                     for (auto& tr : objectTracks_) {
                         if (tr->GetLastObsFrameId() == current_frame_idx_) {
                             // Try reconstruct from points
-                            if ((tr->GetNbObservations() > 10 && tr->GetStatus() == ObjectTrackStatus::ONLY_2D) ||
+                            if ((tr->GetNbObservations() > oa3::P().min_obs && tr->GetStatus() == ObjectTrackStatus::ONLY_2D) ||
                                 (tr->GetNbObservations() % 2 == 0 && tr->GetStatus() == ObjectTrackStatus::INITIALIZED)) {
                                 // tr->ReconstructFromSamplesEllipsoid();
                                 // tr->ReconstructFromSamplesCenter();
@@ -599,7 +602,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
                         }
 
                         // Try to optimize objects and insert in the map
-                        if (tr->GetNbObservations() >= 40 && tr->GetStatus() == ObjectTrackStatus::INITIALIZED) {
+                        if (tr->GetNbObservations() >= oa3::P().map_obs && tr->GetStatus() == ObjectTrackStatus::INITIALIZED) {
                             tr->OptimizeReconstruction(mpMap);
                             // std::cout << "First opimitzation done.\n";
                             auto checked = tr->CheckReprojectionIoU(0.3);
@@ -607,6 +610,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp,
                                 // Add object to map
                                 FileManager reprojected_object(output_folder + "first_3d_object.csv");
                                 reprojected_object << tr->GetCategoryId() << ',' << current_frame_idx_ << '\n';
+                                std::printf("LANDMARK_NEW %lu %u %u\n", (unsigned long)current_frame_idx_, (unsigned)tr->GetId(), (unsigned)tr->GetCategoryId()); std::fflush(stdout);
                                 tr->InsertInMap(mpMap);
                                 // Add object in the local object mapping thread to run a fusion checking
                                 if (local_object_mapper_)
@@ -846,7 +850,7 @@ void Tracking::Track()
         if(bOK)
             mState = OK;
         else
-            mState=LOST;
+            { mState=LOST; std::printf("LOST %lu\n", (unsigned long)current_frame_idx_); std::fflush(stdout); }
 
         // // Update drawer
         // mpFrameDrawer->Update(this);
@@ -1865,6 +1869,15 @@ bool Tracking::RelocalizationFromObjects(bool use_points)
 }
 
 bool Tracking::Relocalization()
+{
+    auto oa3_t1 = std::chrono::steady_clock::now();
+    bool oa3_ok = RelocalizationImpl();
+    double oa3_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - oa3_t1).count();
+    std::printf("RELOC %lu %d %.3f\n", (unsigned long)current_frame_idx_, oa3_ok ? 1 : 0, oa3_ms); std::fflush(stdout);
+    return oa3_ok;
+}
+
+bool Tracking::RelocalizationImpl()
 {
     mLastProcessedState = mState;
 
