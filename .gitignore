@@ -4,6 +4,8 @@
 bin/
 build/
 lib/
+Thirdparty/*/build/
+Thirdparty/*/lib/
 
 # large binary assets (vocabulary, model weights)
 Vocabulary/*.txt
