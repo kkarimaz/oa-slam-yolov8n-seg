@@ -1,0 +1,128 @@
+# =====================================================================================
+#  OA-3 ablation configuration  (copy to  oa3_config.yaml  and edit the paths)
+#  Relative paths are resolved from the location of THIS file, except executable /
+#  vocabulary / ignore files which are resolved from project.oa_slam_root.
+# =====================================================================================
+
+project:
+  oa_slam_root: /home/ika/OA-SLAM-YOLOv8n      # repository root = working directory of the run
+  executable: ./bin/oa-slam
+  vocabulary: Vocabulary/ORBvoc.txt
+  reloc_mode: points                            # 'points' | 'objects' | 'points+objects'  -> keep the value used in the manuscript
+  show_viewer: 0                                # headless
+  ignore_file: ""                               # only for forks with the categories_to_ignore_file argument (leave "" otherwise)
+
+  # Command line of the executable. Upstream OA-SLAM (Inria, 2022) takes 7 positional arguments:
+  #   ./oa-slam vocabulary_file camera_file path_to_image_sequence detections_file relocalization_mode output_name show_AR_viewer
+  # Fields: {exe} {vocab} {yaml} {seq_dir} {frames_list} {det_json} {ignore_file} {reloc_mode} {out_name} {show_viewer}
+  arg_template: "{exe} {vocab} {yaml} {frames_list} {det_json} {reloc_mode} {out_name} {show_viewer}"
+  # Forks with a categories_to_ignore_file argument (8 positional arguments) use instead:
+  # arg_template: "{exe} {vocab} {yaml} {frames_list} {det_json} {ignore_file} {reloc_mode} {out_name} {show_viewer}"
+
+  # Where the run writes its results. Upstream OA-SLAM creates the folder  <cwd>/<out_name>/  and writes:
+  #   camera_poses_<out_name>_tum.txt   (every frame, TUM format; untracked frames = identity pose)
+  #   keyframes_poses_<out_name>_tum.txt, map_objects_<out_name>.txt (dual quadrics), map_<out_name>.yaml, ...
+  output_subdir: "{out_name}"                   # moved into the run folder after the run ("" if the fork writes flat files)
+  output_files: []                              # extra flat files written into cwd, e.g. ["CameraTrajectory.txt"]
+  trajectory_for_eval: "camera_poses_{out_name}_tum.txt"      # alternative: "keyframes_poses_{out_name}_tum.txt"
+  map_objects_file: "map_objects_{out_name}.txt"              # used for landmark / duplicate counting
+
+datasets:
+  # frames_list: the rgb.txt passed to OA-SLAM (its non-comment line count = number of frames)
+  fr3_walking_half:
+    dataset: TUM
+    set: dynamic
+    seq_dir: /data/tum/rgbd_dataset_freiburg3_walking_halfsphere
+    frames_list: /data/tum/rgbd_dataset_freiburg3_walking_halfsphere/rgb.txt
+    gt: /data/tum/rgbd_dataset_freiburg3_walking_halfsphere/groundtruth.txt
+    yaml: /home/ika/OA-SLAM-YOLOv8n/Cameras/TUM3.yaml
+    det_json: /home/ika/OA-SLAM-YOLOv8n/detections/fr3_walking_half_yolov8n.json
+  fr2_desk_w_person:
+    dataset: TUM
+    set: dynamic
+    seq_dir: /data/tum/rgbd_dataset_freiburg2_desk_with_person
+    frames_list: /data/tum/rgbd_dataset_freiburg2_desk_with_person/rgb.txt
+    gt: /data/tum/rgbd_dataset_freiburg2_desk_with_person/groundtruth.txt
+    yaml: /home/ika/OA-SLAM-YOLOv8n/Cameras/TUM2.yaml
+    det_json: /home/ika/OA-SLAM-YOLOv8n/detections/fr2_desk_w_person_yolov8n.json
+  bonn_person_track:
+    dataset: Bonn
+    set: dynamic
+    seq_dir: /data/bonn/rgbd_bonn_person_tracking
+    frames_list: /data/bonn/rgbd_bonn_person_tracking/rgb.txt
+    gt: /data/bonn/rgbd_bonn_person_tracking/groundtruth.txt
+    yaml: /home/ika/OA-SLAM-YOLOv8n/Cameras/bonn.yaml
+    det_json: /home/ika/OA-SLAM-YOLOv8n/detections/bonn_person_track_yolov8n.json
+  bonn_crowd:                                   # negative control: reproducible to +/-2 % in the repeated-run campaign
+    dataset: Bonn
+    set: dynamic
+    seq_dir: /data/bonn/rgbd_bonn_crowd
+    frames_list: /data/bonn/rgbd_bonn_crowd/rgb.txt
+    gt: /data/bonn/rgbd_bonn_crowd/groundtruth.txt
+    yaml: /home/ika/OA-SLAM-YOLOv8n/Cameras/bonn.yaml
+    det_json: /home/ika/OA-SLAM-YOLOv8n/detections/bonn_crowd_yolov8n.json
+
+ablation:
+  runs_per_cell: 3
+  include_default_cell: true                    # false if the default cell is taken from the OA-2 (conf 0.5) campaign
+  default_cell_name: default
+
+  # Defaults of upstream OA-SLAM (src/Tracking.cc). tools/patch_params.py exposes them as environment variables.
+  # VERIFY them against your fork (grep MIN_2D_IOU_THRESH, MIN_3D_IOU_THRESH, GetNbObservations() in src/Tracking.cc).
+  default:
+    OA_DET_SCORE: 0.5        # detection score gate inside tracking  (det->score > 0.5)  -> same value as the manuscript
+    OA_IOU2D: 0.2            # MIN_2D_IOU_THRESH: IoU(detection, last bbox of the track)
+    OA_IOU3D: 0.3            # MIN_3D_IOU_THRESH: IoU(detection, projected ellipsoid bbox)
+    OA_TIME_DIFF: 30         # TIME_DIFF_THRESH: frames before an unobserved track expires
+    OA_NB_MATCH: 10          # THRESHOLD_NB_MATCH: shared map points that force an association
+    OA_MIN_OBS: 10           # observations before the ellipsoid is initialised  (GetNbObservations() > 10)
+    OA_MAP_OBS: 40           # observations before the ellipsoid is inserted into the map (GetNbObservations() >= 40)
+
+  cells:
+    # P1 - data association gate (2D and 3D IoU thresholds moved together)
+    P1_loose:  { OA_IOU2D: 0.10, OA_IOU3D: 0.15 }
+    P1_tight:  { OA_IOU2D: 0.40, OA_IOU3D: 0.50 }
+    # P2 - minimum observations before ellipsoid initialisation
+    P2_low:    { OA_MIN_OBS: 5 }
+    P2_high:   { OA_MIN_OBS: 20 }
+    # P3 - detection-side ablation: person (COCO id 0) never becomes a landmark.
+    #      drop_categories filters the detection JSON (works with every fork); ignore_file is the fork-native way.
+    P3_noperson: { drop_categories: [0] }
+    # P3_noperson: { ignore_file: config/ignore_person.txt }
+
+  families:                                     # ordering used by the report and the sensitivity figure
+    P1_association: { param: "OA_IOU2D / OA_IOU3D", cells: [P1_loose, default, P1_tight], labels: ["0.10/0.15", "0.20/0.30 (default)", "0.40/0.50"] }
+    P2_min_obs:     { param: "OA_MIN_OBS",          cells: [P2_low, default, P2_high],     labels: ["5", "10 (default)", "20"] }
+    P3_person:      { param: "person landmarks",    cells: [default, P3_noperson],          labels: ["used (default)", "ignored"] }
+
+  control_sequence: bonn_crowd
+  control_tolerance_rel: 0.25                   # flag the setup if the control sequence moves by more than 25 % in any cell
+
+execution:
+  results_root: results_oa3
+  cwd: oa_slam_root                             # oa_slam_root | run_dir   (working directory of the executable)
+  interleave: true                              # sequence-major, cells alternated within each run index (limits drift bias)
+  sleep_between_runs_s: 5
+  timeout_s: 2400                               # OA-SLAM replays at sensor rate: ~ sequence duration + start-up
+  min_frame_coverage: 0.90                      # tracked (non-identity) poses / frames; below = flagged low_coverage
+  retry_failed_once: true
+
+evaluation:
+  evo: auto                                     # auto | evo | builtin
+  ate_align: true                               # evo_ape ... -a   (SE(3) Umeyama, as in the manuscript)
+  align_scale: false                            # true -> evo -as (Sim(3)); only if that is what the manuscript used
+  drop_identity_poses: true                     # remove untracked (identity) rows before evaluation
+  rpe_delta: 1                                  # frames
+  max_time_diff_s: 0.02
+  jump_threshold_m: 0.5                         # single-step RPE above this = relocalisation jump / map reset
+  log_patterns:                                 # regexes applied to run.log
+    effective:      "^EFFECTIVE\\s+(\\w+)\\s*=\\s*(\\S+)"
+    landmark_new:   "^LANDMARK_NEW\\b"
+    assoc_matched:  "^ASSOC\\s+\\S+\\s+matched\\b"
+    assoc_new:      "^ASSOC\\s+\\S+\\s+new\\b"
+    lost:           "^LOST\\b"
+    reloc:          "^RELOC\\s+\\S+\\s+(\\d)\\s+(\\S+)"     # group1 = success 0/1, group2 = duration ms
+    frame_ms:       "^FRAME\\s+\\S+\\s+(\\S+)"              # group1 = tracking ms (patched main loop)
+    map_objects:    "^Nb Map Objects\\s*:\\s*(\\d+)"        # upstream per-frame print; last value = objects in map
+    mean_track_s:   "^mean tracking time:\\s*(\\S+)"        # upstream end-of-run print (seconds)
+    median_track_s: "^median tracking time:\\s*(\\S+)"

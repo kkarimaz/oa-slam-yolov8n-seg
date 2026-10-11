@@ -1,0 +1,8 @@
+results_*/
+mock_data/
+mock_root/
+oa3_config_mock.yaml
+__pycache__/
+*.pyc
+runner.out
+stage*_runner.out
