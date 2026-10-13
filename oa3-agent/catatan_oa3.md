@@ -319,3 +319,60 @@ Dicek langsung isi folder `results_oa3/bonn_crowd/default/run01/`: berisi
 `map_points_*.obj`, `map_*.mappoints/.keyframes/.features/.objecttracks/.yaml`, seluruh CSV timing,
 `run.log`, `meta.json`, `eval.json`. Bukan cuma metrik ringkas — semua artefak mentah per run sudah
 otomatis dipindahkan & disimpan oleh `oa3.runner` (tidak perlu perubahan lebih lanjut untuk ini).
+
+## 15. Campaign kedua: deteksi real-time (CPU), bukan JSON precomputed — 2026-10-13
+
+**Instruksi Bu Ika**: campaign OA-3 harus dijalankan dengan deteksi *real-time*, bukan dari file JSON
+precomputed. Ini campaign terpisah dari bagian 1-14 di atas (yang semua pakai `det_json` = file JSON),
+dijalankan di laptop/workstation (CPU) — sisi GPU/TensorRT di Jetson belum dikerjakan, menunggu
+instruksi terpisah.
+
+**Perubahan teknis** (lihat juga pesan commit terkait kalau sudah di-commit):
+- `oa3_config.yaml`: `det_json` tiap dataset diarahkan ke `yolov8n-seg.onnx` (bukan file JSON lagi) —
+  memicu jalur `ObjectDetector` (live inference, `src/ImageDetections.cc`) di `Examples/oa-slam.cc`,
+  bukan `DetectionsFromFile`. Model, bobot, dan confidence (0.5) SAMA seperti sebelumnya — cuma sumber
+  deteksinya yang berubah dari file ke live inference.
+- Cell `P3_noperson` / `P1best_P2best_noperson`: filter person (COCO id 0) dipindah dari `drop_categories`
+  (filter JSON, tidak bisa dipakai lagi tanpa JSON) ke `ignore_file` (`config/ignore_person.txt`, isi "0")
+  — mekanisme fork-native yang juga dihormati `ObjectDetector::detect()`.
+- `execution.results_root` diubah ke `results_oa3_realtime_cpu` (BUKAN menimpa `results_oa3/` yang lama)
+  supaya tidak campur/tertukar dengan hasil campaign JSON di bagian 1-14.
+- `CLAUDE.md` & `README.md` diupdate: aturan lama "no TensorRT" sudah usang untuk sisi deteksi
+  real-time CPU ini (tetap belum ada TensorRT sama sekali di codebase untuk sisi Jetson/GPU).
+
+**Hasil**: 108 run (4 sekuens x 9 cell x 3 ulangan) selesai — `ok=79, low_coverage=29`.
+- 27 dari 29 `low_coverage` ada di `bonn_person_track` (SEMUA 9 cell x 3 ulangan) — **pola identik**
+  dengan yang sudah terdokumentasi di bagian 1-14 untuk campaign JSON (coverage 0.49-0.62 di situ juga).
+  Bukan regresi baru dari real-time, karakteristik sekuens itu sendiri.
+- 1 outlier di `fr3_walking_half/P1best_P2high` dan 1 di `fr2_desk_w_person/P1best_P2best_noperson` —
+  juga konsisten dengan pola non-determinism run-to-run yang sudah pernah dilihat sebelumnya.
+
+**TEMUAN BARU — control-check flag beda dari campaign JSON**: `bonn_crowd` (kontrol) bergerak **-25.2%**
+di cell `P2_high` (OA_MIN_OBS=20), melebihi `control_tolerance_rel: 0.25`. Di campaign JSON lama, cell
+yang flag justru `P1best_P2best_noperson` (+30%), BUKAN `P2_high`. Data mentah (median ATE per run,
+`oa3_results.csv`):
+
+| run | `default` ATE median | `P2_high` ATE median |
+|---|---|---|
+| 1 | 0.0886 | 0.0701 |
+| 2 | 0.0893 | 0.0660 |
+| 3 | 0.1140 | 0.0692 |
+
+Spread rapat per grup (tidak overlap), tidak ada `jump`/`RELOC` anomali pembeda — kemungkinan ini efek
+nyata dari `OA_MIN_OBS=20`, bukan noise. **Belum diputuskan asisten** — ini perlu dibawa ke Bu Ika:
+apakah `bonn_crowd` masih valid dipakai sebagai kontrol parameter-insensitive, atau temuan ini perlu
+dicatat di manuscript.
+
+**PERINGATAN yang SAMA seperti bagian 13 berlaku lagi di sini**: `results_oa3_realtime_cpu/OA3_report.md`
+section 4 pakai agregasi mean±SD (bukan median) dan `ablation.families` di config cuma mencakup cell
+OFAT asli (P1_loose/P1_tight, P2_low/P2_high, P3_noperson) — BUKAN cell sequential (`P1best_P2low`, dst).
+Jadi section 4/7 report otomatis **tidak** menjawab "kombinasi mana yang menang di bawah deteksi
+real-time" — itu perlu dianalisis manual dari `oa3_results.csv` (median per sel, seperti bagian 10-12),
+BELUM dikerjakan asisten untuk campaign real-time ini. Kalau Bu Ika/user perlu angka "pemenang
+sequential" versi real-time, ini pekerjaan tambahan yang belum dilakukan.
+
+**Rekomendasi handoff**: kirim `catatan_oa3.md` (file ini) bersama
+`results_oa3_realtime_cpu/oa3_handoff_20261013_1536.zip` ke Bu Ika — zip-nya sendiri sudah lengkap
+(`config_used.yaml`, `platform.json`, `OA3_report.md`, 3 figure, `oa3_results.csv`, seluruh raw
+per-run `run.log`/`meta.json`/`eval.json`/trajectory), tapi interpretasinya butuh catatan di bagian
+ini (terutama soal control-check `P2_high` dan limitasi section 4/7 report).
