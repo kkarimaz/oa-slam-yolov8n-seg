@@ -94,7 +94,7 @@ def main() -> int:
             if n < 100:
                 warnings.append("[%s] only %d frames listed in %s" % (name, n, fr))
             dj = resolve(cfg, d.get("det_json"))
-            if dj and dj.exists():
+            if dj and dj.exists() and dj.suffix == ".json":
                 for note in check_detections_json(dj, fr):
                     warnings.append("[%s] %s" % (name, note))
 

@@ -33,7 +33,11 @@ datasets:
   # frames_list: the rgb.txt passed to OA-SLAM (its non-comment line count = number of frames)
   # yaml: Bonn sequences use TUM3.yaml too -- Bonn RGBD Dynamic was captured with the same sensor/intrinsics
   # as TUM fr3 (no Cameras/bonn.yaml exists in this fork; confirmed earlier in this project's own benchmark).
-  # det_json: generated with scripts/generate_detections.py --conf 0.5 (manuscript confidence), --imgsz 320.
+  # det_json: switched 2026-10-13 (Bu Ika's instruction: the campaign must run with real-time detection,
+  # not precomputed files) to the live .onnx path. Same weights/conf as before (yolov8n-seg.onnx,
+  # score threshold 0.5 hardcoded in ObjectDetector::detect, src/ImageDetections.cc) -- only the
+  # detection SOURCE changed (live inference vs precomputed JSON), not the model or its thresholds.
+  # Every dataset below points at the same model file; detection is no longer dataset-specific.
   fr3_walking_half:
     dataset: TUM
     set: dynamic
@@ -41,7 +45,7 @@ datasets:
     frames_list: /media/khansa/KINGSTON/Dataset/TUM_RGBD/fr3_walking_halfsphere/rgbd_dataset_freiburg3_walking_halfsphere/rgb.txt
     gt: /media/khansa/KINGSTON/Dataset/TUM_RGBD/fr3_walking_halfsphere/rgbd_dataset_freiburg3_walking_halfsphere/groundtruth.txt
     yaml: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/Cameras/TUM3.yaml
-    det_json: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/oa3-agent/detections/fr3_walking_half_yolov8n.json
+    det_json: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/yolov8n-seg.onnx
   fr2_desk_w_person:
     dataset: TUM
     set: dynamic
@@ -49,7 +53,7 @@ datasets:
     frames_list: /media/khansa/KINGSTON/Dataset/TUM_RGBD/fr2_desk_w_person/rgbd_dataset_freiburg2_desk_with_person/rgb.txt
     gt: /media/khansa/KINGSTON/Dataset/TUM_RGBD/fr2_desk_w_person/rgbd_dataset_freiburg2_desk_with_person/groundtruth.txt
     yaml: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/Cameras/TUM2.yaml
-    det_json: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/oa3-agent/detections/fr2_desk_w_person_yolov8n.json
+    det_json: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/yolov8n-seg.onnx
   bonn_person_track:
     dataset: Bonn
     set: dynamic
@@ -57,7 +61,7 @@ datasets:
     frames_list: /media/khansa/KINGSTON/Dataset/BONN/rgbd_bonn_person_tracking/rgb.txt
     gt: /media/khansa/KINGSTON/Dataset/BONN/rgbd_bonn_person_tracking/groundtruth.txt
     yaml: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/Cameras/TUM3.yaml
-    det_json: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/oa3-agent/detections/bonn_person_track_yolov8n.json
+    det_json: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/yolov8n-seg.onnx
   bonn_crowd:                                   # negative control: reproducible to +/-2 % in the repeated-run campaign
     dataset: Bonn
     set: dynamic
@@ -65,7 +69,7 @@ datasets:
     frames_list: /media/khansa/KINGSTON/Dataset/BONN/rgbd_bonn_crowd/rgb.txt
     gt: /media/khansa/KINGSTON/Dataset/BONN/rgbd_bonn_crowd/groundtruth.txt
     yaml: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/Cameras/TUM3.yaml
-    det_json: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/oa3-agent/detections/bonn_crowd_yolov8n.json
+    det_json: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/yolov8n-seg.onnx
 
 ablation:
   runs_per_cell: 3
@@ -95,8 +99,10 @@ ablation:
     P2_low:    { OA_MIN_OBS: 5 }
     P2_high:   { OA_MIN_OBS: 20 }
     # P3 - detection-side ablation: person (COCO id 0) never becomes a landmark.
-    #      drop_categories filters the detection JSON (works with every fork); ignore_file is the fork-native way.
-    P3_noperson: { drop_categories: [0] }
+    # drop_categories (JSON-filtering) no longer works with real-time detection (no JSON to filter) -- use
+    # the fork-native ignore_file instead, which ObjectDetector::detect() also honours (ignored_cats_,
+    # src/ImageDetections.cc:206), so the live-inference path drops the same category at run time.
+    P3_noperson: { ignore_file: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/oa3-agent/config/ignore_person.txt }
 
     # --- Sequential/greedy stages added 2026-10-09 (see catatan_oa3.md section 7) ---
     # Stage 1 winner: P1_loose (OA_IOU2D=0.10, OA_IOU3D=0.15). Stage 2 fixes that and sweeps P2.
@@ -108,8 +114,7 @@ ablation:
     # Stage 2 winner: P1best_P2default (OA_MIN_OBS=10, unchanged from default) -- same params as
     # P1_loose, so that cell is reused again. Stage 3 fixes P1+P2 and sweeps P3 (person landmarks).
     # P1best_P2best_default (person used) == P1_loose again, reused; only the noperson cell is new.
-    P1best_P2best_noperson: { OA_IOU2D: 0.10, OA_IOU3D: 0.15, drop_categories: [0] }
-    # P3_noperson: { ignore_file: config/ignore_person.txt }
+    P1best_P2best_noperson: { OA_IOU2D: 0.10, OA_IOU3D: 0.15, ignore_file: /home/khansa/Documents/coding/oa-slam-yolov8n-seg/oa3-agent/config/ignore_person.txt }
 
   families:                                     # ordering used by the report and the sensitivity figure
     P1_association: { param: "OA_IOU2D / OA_IOU3D", cells: [P1_loose, default, P1_tight], labels: ["0.10/0.15", "0.20/0.30 (default)", "0.40/0.50"] }
@@ -120,7 +125,9 @@ ablation:
   control_tolerance_rel: 0.25                   # flag the setup if the control sequence moves by more than 25 % in any cell
 
 execution:
-  results_root: results_oa3
+  results_root: results_oa3_realtime_cpu         # separate from results_oa3/ (the old JSON-based campaign) so the
+                                                  # runner's resume logic doesn't skip these as "already done" --
+                                                  # the two are not comparable (different detection source).
   cwd: oa_slam_root                             # oa_slam_root | run_dir   (working directory of the executable)
   interleave: true                              # sequence-major, cells alternated within each run index (limits drift bias)
   sleep_between_runs_s: 5
